@@ -530,4 +530,31 @@
     if (sol) { items.push({ label: 'linear prediction from λ', color: C.orange, dash: [9, 6] }); items.push({ label: 'envelope', color: C.orange, fill: true }); }
     legend(ctx, boxA.x + 8, boxA.y + 6, items);
     if (cfg.forced && sol) tag(ctx, (m2 ? 'θp' : 'xp') + ' (particular solution)', boxA.x + boxA.w - 8, boxA.y + boxA.h - 8, { align: 'right', base: 'bottom', color: C.axis });
-    tag(ctx, 
+    tag(ctx, 'dotted line = last push (prediction starts here)', boxA.x + 8, boxA.y + boxA.h - 8, { base: 'bottom', color: C.orange });
+
+    // panel B: control effort u(t)
+    axes(ctx, boxB, mB, xr, [-Yb, Yb], { xlabel: 'time  t  (s)', ylabel: 'u(t)', nx: 10, ny: 2 });
+    clipTo(ctx, boxB);
+    if (cfg.saturate) {
+      ctx.setLineDash([8, 6]); ctx.strokeStyle = C.red; ctx.lineWidth = 2;
+      for (const v of [-cfg.p.umax, cfg.p.umax]) { ctx.beginPath(); ctx.moveTo(boxB.x, mB.Y(v)); ctx.lineTo(boxB.x + boxB.w, mB.Y(v)); ctx.stroke(); }
+      ctx.setLineDash([]);
+    }
+    const clu = v => clamp(v, -3 * Yb, 3 * Yb);
+    ctx.strokeStyle = C.purple; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.beginPath();
+    for (const s of sim.hist) {
+      if (s.t < t0 - 0.3) continue;
+      ctx.lineTo(mB.X(s.t), mB.Y(clu(s.u)));
+    }
+    ctx.lineTo(mB.X(sim.t), mB.Y(clu(sim.ctrl.u)));
+    ctx.stroke();
+    ctx.strokeStyle = '#6b7280'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(mB.X(sim.t), boxB.y); ctx.lineTo(mB.X(sim.t), boxB.y + boxB.h); ctx.stroke();
+    ctx.restore();
+
+    const msg = !cfg.feedback ? 'feedback off: u = 0' : cfg.saturate ? 'control effort u (clipped at ±u_max)' : 'control effort u';
+    tag(ctx, msg, boxB.x + 8, boxB.y + 6, { color: C.purple, font: FONT_B });
+  }
+
+  global.DEQ.Plots = { drawTab, timeSeries, invGain, resetRanges };
+})(window);
