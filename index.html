@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Can feedback stabilize an unstable equilibrium?</title>
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-view="math">
+
+<header class="topbar">
+  <div class="title">
+    <h1>Can feedback stabilize an unstable equilibrium?</h1>
+    <p class="sub">First-/second-order linear systems · eigenvalues · parameter tests</p>
+  </div>
+
+  <div class="toolbar" role="toolbar" aria-label="Simulation controls">
+    <div class="group">
+      <span class="group-label">System</span>
+      <div class="seg">
+        <button id="mode-1" aria-pressed="true">1st order · cart</button>
+        <button id="mode-2" aria-pressed="false">2nd order · balancing robot</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="group-label">Equation</span>
+      <div class="seg">
+        <button id="eq-hom" aria-pressed="true">Homogeneous (d = 0)</button>
+        <button id="eq-non" aria-pressed="false">Non-homogeneous (d ≠ 0)</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="group-label">Feedback</span>
+      <button id="fb-toggle" class="btn big" aria-pressed="true">ON</button>
+    </div>
+
+    <div class="group">
+      <span class="group-label">Push &amp; run</span>
+      <div class="btnrow">
+        <button id="btn-nudge-l" class="btn" title="Nudge left (←)">◀ Nudge</button>
+        <button id="btn-nudge-r" class="btn" title="Nudge right (→)">Nudge ▶</button>
+        <button id="btn-pause" class="btn" title="Space">Pause</button>
+        <button id="btn-reset" class="btn" title="R">Reset</button>
+        <label class="speed">Speed
+          <select id="speed">
+            <option value="0.25">¼×</option>
+            <option value="0.5">½×</option>
+            <option value="1" selected>1×</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="group view-switch">
+      <span class="group-label">Show</span>
+      <div class="seg">
+        <button id="view-math" aria-pressed="true">Equations</button>
+        <button id="view-plots" aria-pressed="false">Plots</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- Column 1: robot, control law, parameters -->
+  <section class="col col-robot">
+    <div class="card">
+      <div class="card-head">
+        <h2 id="robot-title">Cart on a rail</h2>
+        <div id="status-chip" class="chip" role="status" aria-live="polite"></div>
+      </div>
+      <canvas id="robot-canvas" tabindex="0"
+              aria-label="Simulation canvas. Drag the robot to set an initial condition."></canvas>
+      <p class="hint">Drag the robot, then release: the release point is the initial condition.
+        Keys: ← / → nudge · Space pause · R reset · F feedback (click the page first).</p>
+    </div>
+
+    <div class="card">
+      <h3>Control law in action</h3>
+      <div id="bars"></div>
+      <div id="readout" class="readout"></div>
+    </div>
+
+    <div class="card">
+      <h3>Parameters</h3>
+      <div id="presets" class="presets"></div>
+      <div id="controls"></div>
+    </div>
+  </section>
+
+  <!-- Column 2: equations + tests -->
+  <section class="col col-math">
+    <div class="card">
+      <div class="card-head">
+        <h2>Equations (live)</h2>
+        <span id="approx-badge" class="badge-warn" hidden></span>
+      </div>
+      <div id="eq-list" class="eq-scroll"></div>
+    </div>
+
+    <div class="card">
+      <h3>Parameter tests</h3>
+      <div id="tests"></div>
+    </div>
+
+    <div class="card notice-card">
+      <h3>What to notice</h3>
+      <div id="notice"></div>
+    </div>
+  </section>
+
+  <!-- Column 3: plots -->
+  <section class="col col-plots">
+    <div class="card" id="plot-card">
+      <div class="card-head">
+        <div id="plot-tabs" class="tabs" role="tablist"></div>
+        <button id="btn-enlarge" class="btn small" title="Enlarge for projector (Esc to close)">⤢ Enlarge</button>
+      </div>
+      <canvas id="plot-canvas" aria-label="Analysis plot"></canvas>
+      <p id="plot-hint" class="hint"></p>
+    </div>
+
+    <div class="card">
+      <h3>Time response: simulation vs. prediction from the eigenvalues</h3>
+      <canvas id="time-canvas" aria-label="Time series"></canvas>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="vendor/katex/katex.min.js"></script>
+<script src="js/model.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/plots.js"></script>
+<script src="js/robot.js"></script>
+<script src="js/math-panel.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
