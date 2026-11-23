@@ -17,11 +17,10 @@
     };
 
     s.reset = function (mode) {
-      s.t = 0; s.z = mode === 1 ? [0] : [0, 0];
+      s.t = 0; s.z = mode === 1 ? [0] : [0, 0, 0, 0];     // mode 2: theta, omega, wheel x, wheel v
       s.fallen = false; s.held = false; s.acc = 0; s.sampAcc = 0; s.hist = [];
       s.anchor = { t: 0, z: s.z.slice() };
     };
-    // the anchor = state at the last push / parameter change; predictions start from it
     s.setAnchor = function () { s.anchor = { t: s.t, z: s.z.slice() }; };
 
     s.sample = function (cfg, brk) {

@@ -130,6 +130,7 @@
     ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
   }
   function eigText(an) {
+    if (an.hold) return 'max Re λ = ' + ui(an.maxRe, 2) + '  (4 poles)';
     if (an.mode === 1) return 'λ = ' + ui(an.lam, 2);
     if (an.type === 'complex') return 'λ = ' + ui(an.eig[0].re, 2) + ' ± ' + ui(Math.abs(an.eig[0].im), 2) + ' i';
     return 'λ₁ = ' + ui(an.eig[0].re, 2) + ',  λ₂ = ' + ui(an.eig[1].re, 2);
@@ -193,7 +194,7 @@
       ctx.setLineDash([]);
     }
     // vector field of the *actual* system (includes sin θ / saturation if enabled)
-    const nx = 17, ny = 12;
+    const nx = cfg.hold ? 0 : 17, ny = 12;     // no 2-D vector field when the wheel states also matter
     for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
       const thd = xr[0] + (i + 0.5) * 2 * thR / nx, wd = yr[0] + (j + 0.5) * 2 * omR / ny;
       const dz = M.deriv(cfg, [thd * DEG, wd * DEG]);
@@ -500,7 +501,7 @@
       ctx.setLineDash([2, 5]); ctx.strokeStyle = C.axis; ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.moveTo(boxA.x, mA.Y(sol.center * k)); ctx.lineTo(boxA.x + boxA.w, mA.Y(sol.center * k)); ctx.stroke(); ctx.setLineDash([]);
     }
-    if (pred.length) {                                         // envelope
+    if (pred.length && !sol.noEnv) {                           // envelope
       const c = isFinite(sol.center) ? sol.center * k : 0;
       ctx.fillStyle = 'rgba(194,65,12,0.12)'; ctx.beginPath();
       pred.forEach((q, i) => { const x = mA.X(q.t), y = mA.Y(cl(c + q.b)); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
@@ -527,7 +528,7 @@
     ctx.restore();
 
     const items = [{ label: 'simulation', color: C.blue }];
-    if (sol) { items.push({ label: 'linear prediction from λ', color: C.orange, dash: [9, 6] }); items.push({ label: 'envelope', color: C.orange, fill: true }); }
+    if (sol) { items.push({ label: 'linear prediction from λ', color: C.orange, dash: [9, 6] }); if (!sol.noEnv) items.push({ label: 'envelope', color: C.orange, fill: true }); }
     legend(ctx, boxA.x + 8, boxA.y + 6, items);
     if (cfg.forced && sol) tag(ctx, (m2 ? 'θp' : 'xp') + ' (particular solution)', boxA.x + boxA.w - 8, boxA.y + boxA.h - 8, { align: 'right', base: 'bottom', color: C.axis });
     tag(ctx, 'dotted line = last push (prediction starts here)', boxA.x + 8, boxA.y + boxA.h - 8, { base: 'bottom', color: C.orange });

@@ -31,8 +31,8 @@
   }
   function label(ctx, text, x, y, o) {
     o = o || {};
-    ctx.save(); ctx.font = o.font || ('14px ' + FAM);
-    const tw = ctx.measureText(text).width, pad = 5, th = 17;
+    ctx.save(); ctx.font = o.font || ('13px ' + FAM);
+    const tw = ctx.measureText(text).width, pad = 5, th = 16;
     let bx = x; if (o.align === 'right') bx = x - tw; else if (o.align === 'center') bx = x - tw / 2;
     const by = o.base === 'bottom' ? y - th : y;
     ctx.fillStyle = o.bg || 'rgba(255,255,255,0.88)'; ctx.fillRect(bx - pad, by - 1, tw + 2 * pad, th + 2);
@@ -49,11 +49,11 @@
     ctx.restore();
   }
   function banner(ctx, w, y, text) {
-    ctx.save(); ctx.font = 'bold 20px ' + FAM;
-    const tw = ctx.measureText(text).width + 36;
+    ctx.save(); ctx.font = 'bold 17px ' + FAM;
+    const tw = ctx.measureText(text).width + 30;
     ctx.fillStyle = 'rgba(254,226,226,0.95)'; ctx.strokeStyle = COL.red; ctx.lineWidth = 3;
-    rr(ctx, w / 2 - tw / 2, y, tw, 40, 10); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = COL.red; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, w / 2, y + 21);
+    rr(ctx, w / 2 - tw / 2, y, tw, 36, 10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = COL.red; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, w / 2, y + 19);
     ctx.restore();
   }
   function segDist(px, py, x0, y0, x1, y1) {
@@ -66,32 +66,29 @@
   /* ---------- mode 1: cart on a rail ---------- */
   function drawCart(ctx, w, h, D) {
     const { cfg, sim, an } = D, p = cfg.p, R = M.RAIL;
-    const margin = 80, cx = w / 2, railY = Math.round(h * 0.62), ppm = (w - 2 * margin) / (2 * R);
+    const margin = clamp(w * 0.08, 28, 80), cx = w / 2, railY = Math.round(h * 0.64), ppm = (w - 2 * margin) / (2 * R);
     const X = x => cx + x * ppm;
 
     ctx.fillStyle = '#f1f5f9'; ctx.fillRect(0, railY + 8, w, h - railY - 8);
-    // rail, ticks, end stops
     ctx.strokeStyle = COL.rail; ctx.lineWidth = 6; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(X(-R), railY); ctx.lineTo(X(R), railY); ctx.stroke();
-    ctx.lineWidth = 2; ctx.fillStyle = COL.axis; ctx.font = '14px ' + FAM; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.lineWidth = 2; ctx.fillStyle = COL.axis; ctx.font = '13px ' + FAM; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     for (let i = -4; i <= 4; i++) {
       const x = i * 0.5, whole = i % 2 === 0;
       ctx.beginPath(); ctx.moveTo(X(x), railY + 4); ctx.lineTo(X(x), railY + (whole ? 14 : 10)); ctx.stroke();
       if (whole) ctx.fillText(M.ui(x, 0), X(x), railY + 16);
     }
-    ctx.textAlign = 'left'; ctx.fillText('x (m)', X(R) + 14, railY - 8);
+    ctx.textAlign = 'left'; ctx.fillText('x (m)', X(R) + 10, railY - 8);
     ctx.fillStyle = COL.red;
     for (const s of [-1, 1]) ctx.fillRect(X(s * R) - 5, railY - 34, 10, 44);
 
-    // equilibrium marker
     if (an.hasEq && Math.abs(an.xp) <= R) {
-      const ex = X(an.xp), ey = railY + 50, col = stabColor(an);
+      const ex = X(an.xp), ey = railY + 44, col = stabColor(an);
       ctx.fillStyle = an.stability === 'stable' ? col : '#fff'; ctx.strokeStyle = col; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(ex, ey - 9); ctx.lineTo(ex + 9, ey); ctx.lineTo(ex, ey + 9); ctx.lineTo(ex - 9, ey); ctx.closePath(); ctx.fill(); ctx.stroke();
-      label(ctx, 'equilibrium' + (cfg.forced ? ' x_p = ' + M.ui(an.xp, 2) : '') + ' (' + an.stability + ')', ex, ey + 14, { align: 'center', color: col });
+      label(ctx, 'equilibrium' + (cfg.forced ? ' x_p = ' + M.ui(an.xp, 2) : '') + ' (' + an.stability + ')', ex, ey + 12, { align: 'center', color: col });
     }
 
-    // cart
     const x = clamp(sim.z[0], -R, R), px = X(x);
     const wheelR = 11, wy = railY - wheelR - 3, bw = 92, bh = 46, by = wy - 8 - bh;
     ctx.fillStyle = '#e5e7eb'; ctx.strokeStyle = COL.ink; ctx.lineWidth = 3;
@@ -110,39 +107,53 @@
     ctx.beginPath(); ctx.arc(px, by + bh - 10, 5, 0, 7); ctx.fill();
     geo = { mode: 1, X, cx, ppm, px, top: by - 30, bottom: railY + 10 };
 
-    // control arrow
     const u = sim.ctrl ? sim.ctrl.u : 0, Un = Math.max(0.5, cfg.saturate ? p.umax : 3);
-    const ay = by - 38, len = 120 * Math.tanh(u / Un);
+    const ay = Math.max(40, by - 38), len = 110 * Math.tanh(u / Un);
     if (Math.abs(len) >= 2) {
       harrow(ctx, px, ay, len, COL.purple, 5);
-      label(ctx, 'u = ' + M.ui(u, 2), px + len / 2, ay - 26, { align: 'center', color: COL.purple, font: 'bold 14px ' + FAM });
+      label(ctx, 'u = ' + M.ui(u, 2), px + len / 2, ay - 26, { align: 'center', color: COL.purple, font: 'bold 13px ' + FAM });
     } else label(ctx, 'u = 0', px, ay - 14, { align: 'center', color: COL.purple });
 
-    // disturbance
     if (cfg.forced) {
-      const dl = 80 * Math.tanh(p.d / 1), dy = Math.max(46, railY - 150);
-      harrow(ctx, 90 - dl / 2, dy, dl, COL.amber, 6);
-      label(ctx, 'disturbance d = ' + M.ui(p.d, 2) + ' m/s', 20, dy - 30, { color: COL.amber, font: 'bold 14px ' + FAM });
+      const dl = 70 * Math.tanh(p.d / 1), dy = Math.max(70, railY - 150), ax = Math.max(60, w * 0.12);
+      harrow(ctx, ax - dl / 2, dy, dl, COL.amber, 6);
+      label(ctx, 'disturbance d = ' + M.ui(p.d, 2) + ' m/s', 10, dy - 30, { color: COL.amber, font: 'bold 13px ' + FAM });
     }
-    label(ctx, 'Open loop: the cart is pushed away from x = 0', 12, 10, { color: COL.axis });
-    if (sim.fallen) banner(ctx, w, 44, 'Hit the end stop: unstable. Press Reset (R)');
-    else if (D.showHint) label(ctx, 'Drag the cart, then release', w / 2, h - 14, { align: 'center', base: 'bottom', font: 'bold 16px ' + FAM, color: COL.blue });
+    label(ctx, 'x = 0 is unstable without feedback', 10, 8, { color: COL.axis });
+    if (sim.fallen) banner(ctx, w, 38, 'Hit the end stop: unstable. Press Reset (R)');
+    else if (D.showHint) label(ctx, 'Drag the cart, then release', w / 2, h - 12, { align: 'center', base: 'bottom', font: 'bold 15px ' + FAM, color: COL.blue });
   }
 
   /* ---------- mode 2: self-balancing robot on an inverted pendulum ---------- */
   function drawRobot(ctx, w, h, D) {
     const { cfg, sim, an } = D, p = cfg.p;
-    const cx = w / 2, groundY = h - 46, wheelR = 24, pivotY = groundY - wheelR;
-    const availH = pivotY - 64;
-    const len = Math.min(availH, Math.max(110, availH * (0.45 + 0.55 * (p.L - 0.4) / 1.1)));
+    const k = clamp(Math.min(w / 620, h / 380), 0.6, 1.25), k8 = Math.max(k, 0.8);
+    const cx = w / 2, groundY = h - Math.round(40 * k8), wheelR = Math.round(22 * k), pivotY = groundY - wheelR;
+    const availH = pivotY - Math.round(58 * k8);
+    const len = Math.min(availH, Math.max(90, availH * (0.45 + 0.55 * (p.L - 0.4) / 1.1)));
     const th = sim.z[0], tipX = cx + len * Math.sin(th), tipY = pivotY - len * Math.cos(th);
     geo = { mode: 2, cx, pivotY, len, tipX, tipY };
 
-    // ground
+    const wheelsOn = M.wheelsOn(cfg), ppm = len / p.L, xpx = (wheelsOn ? sim.z[2] : 0) * ppm;
+
+    // ground: scrolls so the robot stays centred; tick every 0.5 m
     ctx.fillStyle = COL.ground; ctx.fillRect(0, groundY, w, h - groundY);
     ctx.strokeStyle = COL.rail; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(w, groundY); ctx.stroke();
-    ctx.lineWidth = 2; ctx.strokeStyle = '#94a3b8';
-    for (let x = 0; x < w; x += 22) { ctx.beginPath(); ctx.moveTo(x, groundY + 2); ctx.lineTo(x - 10, groundY + 14); ctx.stroke(); }
+    ctx.strokeStyle = '#94a3b8'; ctx.fillStyle = COL.axis; ctx.lineWidth = 2;
+    ctx.font = '12px ' + FAM; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const half = 0.5 * ppm, i0 = Math.floor((xpx - cx) / half) - 1, i1 = Math.ceil((xpx + w - cx) / half) + 1;
+    for (let i = i0; i <= i1; i++) {
+      const sx = cx + i * half - xpx;
+      ctx.beginPath(); ctx.moveTo(sx, groundY + 2); ctx.lineTo(sx, groundY + (i % 2 ? 8 : 15)); ctx.stroke();
+      if (i % 2 === 0) ctx.fillText(M.ui(i / 2, 0) + ' m', sx, groundY + 18);
+    }
+    if (wheelsOn) {                                           // "start" marker: where the wheel began
+      const sx = cx - xpx;
+      if (sx > -20 && sx < w + 20) {
+        ctx.fillStyle = COL.orange; ctx.beginPath(); ctx.moveTo(sx, groundY + 1); ctx.lineTo(sx - 7, groundY - 11); ctx.lineTo(sx + 7, groundY - 11); ctx.closePath(); ctx.fill();
+        label(ctx, 'start', sx, groundY - 30, { align: 'center', color: COL.orange, font: '12px ' + FAM });
+      }
+    }
 
     // fall limits and upright reference
     ctx.setLineDash([8, 6]); ctx.lineWidth = 2; ctx.strokeStyle = COL.red;
@@ -150,7 +161,7 @@
     ctx.moveTo(cx + wheelR + 4, pivotY); ctx.lineTo(cx + len + 30, pivotY); ctx.stroke();
     ctx.strokeStyle = '#6b7280'; ctx.beginPath(); ctx.moveTo(cx, pivotY); ctx.lineTo(cx, pivotY - len - 34); ctx.stroke();
     ctx.setLineDash([]);
-    label(ctx, 'lies down at ±90°', cx - len - 30, pivotY - 24, { color: COL.red });
+    label(ctx, 'lies down at ±90°', Math.max(4, cx - len - 30), pivotY - 22, { color: COL.red });
 
     // shifted equilibrium (non-homogeneous)
     if (cfg.forced && an.hasEq && Math.abs(an.thetaP) < M.FALL) {
@@ -162,23 +173,25 @@
 
     // angle arc
     if (Math.abs(th) > 0.01) {
+      const ar = 56 * k8;
       ctx.strokeStyle = COL.orange; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(cx, pivotY, 62, -Math.PI / 2, -Math.PI / 2 + th, th < 0); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, pivotY, ar, -Math.PI / 2, -Math.PI / 2 + th, th < 0); ctx.stroke();
       const am = -Math.PI / 2 + th / 2;
-      label(ctx, 'θ = ' + M.ui(th / DEG, 1) + '°', cx + 92 * Math.cos(am), pivotY + 92 * Math.sin(am) - 8, { align: 'center', color: COL.orange, font: 'bold 14px ' + FAM });
+      label(ctx, 'θ = ' + M.ui(th / DEG, 1) + '°', cx + (ar + 30) * Math.cos(am), pivotY + (ar + 30) * Math.sin(am) - 8, { align: 'center', color: COL.orange, font: 'bold 13px ' + FAM });
     }
 
     // body
+    const bw = 17 * k, hw = 24 * k, hh = 34 * k;
     ctx.save(); ctx.translate(cx, pivotY); ctx.rotate(th);
     ctx.strokeStyle = COL.edge; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -len); ctx.lineTo(0, -len - 14); ctx.stroke();
     ctx.fillStyle = COL.orange; ctx.beginPath(); ctx.arc(0, -len - 18, 5, 0, 7); ctx.fill();
     ctx.fillStyle = COL.body; ctx.strokeStyle = COL.edge; ctx.lineWidth = 4;
-    rr(ctx, -17, -len + 30, 34, len - 34, 6); ctx.fill(); ctx.stroke();
+    rr(ctx, -bw, -len + hh - 4, 2 * bw, len - hh - 4, 6); ctx.fill(); ctx.stroke();
     ctx.lineWidth = 2;
-    for (let y = -len + 52; y < -24; y += 20) { ctx.beginPath(); ctx.moveTo(-9, y); ctx.lineTo(9, y); ctx.stroke(); }
-    rr(ctx, -24, -len, 48, 34, 8); ctx.fill(); ctx.lineWidth = 4; ctx.stroke();
-    for (const dx of [-9, 9]) {
-      const ey = -len + 17;
+    for (let y = -len + hh + 18; y < -wheelR - 6; y += 20) { ctx.beginPath(); ctx.moveTo(-bw / 2, y); ctx.lineTo(bw / 2, y); ctx.stroke(); }
+    rr(ctx, -hw, -len, 2 * hw, hh, 8); ctx.fill(); ctx.lineWidth = 4; ctx.stroke();
+    for (const dx of [-9 * k, 9 * k]) {
+      const ey = -len + hh / 2;
       if (sim.fallen) {
         ctx.strokeStyle = COL.red; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.moveTo(dx - 5, ey - 5); ctx.lineTo(dx + 5, ey + 5); ctx.moveTo(dx + 5, ey - 5); ctx.lineTo(dx - 5, ey + 5); ctx.stroke();
@@ -190,33 +203,35 @@
     }
     ctx.restore();
 
-    // wheel
+    // wheel (rolls without slipping)
+    const rot = xpx / wheelR;
     ctx.fillStyle = '#e5e7eb'; ctx.strokeStyle = COL.ink; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.arc(cx, pivotY, wheelR, 0, 7); ctx.fill(); ctx.stroke();
     ctx.lineWidth = 2;
     for (let i = 0; i < 4; i++) {
-      const a = i * Math.PI / 4;
+      const a = i * Math.PI / 4 + rot;
       ctx.beginPath(); ctx.moveTo(cx - wheelR * Math.cos(a), pivotY - wheelR * Math.sin(a)); ctx.lineTo(cx + wheelR * Math.cos(a), pivotY + wheelR * Math.sin(a)); ctx.stroke();
     }
+    ctx.fillStyle = COL.orange; ctx.beginPath();
+    ctx.arc(cx + (wheelR - 6) * Math.cos(rot), pivotY + (wheelR - 6) * Math.sin(rot), 4, 0, 7); ctx.fill();
     ctx.fillStyle = COL.ink; ctx.beginPath(); ctx.arc(cx, pivotY, 6, 0, 7); ctx.fill();
 
-    // control arrow (direction in which u pushes θ)
+    // control arrow
     const u = sim.ctrl ? sim.ctrl.u : 0, Un = Math.max(1, cfg.saturate ? p.umax : 30);
-    const ay = Math.max(24, tipY - 44), al = 120 * Math.tanh(u / Un);
+    const ay = Math.max(44, tipY - 44), al = 110 * Math.tanh(u / Un);
     if (Math.abs(al) >= 2) {
       harrow(ctx, tipX, ay, al, COL.purple, 5);
-      label(ctx, 'u = ' + M.ui(u, 2), tipX + al / 2, ay - 26, { align: 'center', color: COL.purple, font: 'bold 14px ' + FAM });
+      label(ctx, 'u = ' + M.ui(u, 2), tipX + al / 2, ay - 26, { align: 'center', color: COL.purple, font: 'bold 13px ' + FAM });
     } else label(ctx, 'u = 0', tipX, ay - 14, { align: 'center', color: COL.purple });
 
-    // disturbance
     if (cfg.forced) {
-      const dl = 80 * Math.tanh(p.d / 4), dy = pivotY - len * 0.55;
-      harrow(ctx, 70 - dl / 2, dy, dl, COL.amber, 6);
-      label(ctx, 'disturbance d = ' + M.ui(p.d, 2) + ' rad/s²', 14, dy - 30, { color: COL.amber, font: 'bold 14px ' + FAM });
+      const dl = 70 * Math.tanh(p.d / 4), dy = pivotY - len * 0.55, ax = Math.max(56, w * 0.1);
+      harrow(ctx, ax - dl / 2, dy, dl, COL.amber, 6);
+      label(ctx, 'disturbance d = ' + M.ui(p.d, 2) + ' rad/s²', 10, dy - 30, { color: COL.amber, font: 'bold 13px ' + FAM });
     }
-    label(ctx, 'purple arrow: control push u · positive θ = lean right', w - 10, 10, { align: 'right', color: COL.axis });
-    if (sim.fallen) banner(ctx, w, 44, 'Fallen: unstable. Press Reset (R)');
-    else if (D.showHint) label(ctx, 'Drag the robot, then release', w / 2, groundY + 34, { align: 'center', base: 'bottom', font: 'bold 16px ' + FAM, color: COL.blue });
+    if (wheelsOn) label(ctx, 'wheel x = ' + M.ui(sim.z[2], 2) + ' m,  v = ' + M.ui(sim.z[3], 2) + ' m/s' + (cfg.hold && cfg.feedback ? '  (hold on)' : ''), 8, 8, { color: COL.axis });
+    if (sim.fallen) banner(ctx, w, 38, 'Fallen: unstable. Press Reset (R)');
+    else if (D.showHint) label(ctx, 'Drag the robot, then release', w / 2, 36, { align: 'center', font: 'bold 15px ' + FAM, color: COL.blue });
   }
 
   function draw(canvas, D) {
@@ -231,7 +246,7 @@
     return segDist(px, py, geo.cx, geo.pivotY, geo.tipX, geo.tipY) < 34 || Math.hypot(px - geo.tipX, py - geo.tipY) < 40;
   }
 
-  // pointer position -> initial state (velocity zero)
+  // pointer position -> (theta) or (x); main.js fills in the remaining state components
   function pointerToState(cfg, px, py) {
     if (!geo || geo.mode !== cfg.mode) return null;
     if (geo.mode === 1) return [clamp((px - geo.cx) / geo.ppm, -M.RAIL + 0.02, M.RAIL - 0.02)];

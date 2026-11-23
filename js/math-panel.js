@@ -1,20 +1,19 @@
-/* math-panel.js — KaTeX equation stack, parameter tests, "what to notice", control-law bars */
+/* math-panel.js — KaTeX equation stepper, summary strip, parameter tests, "what to notice", control-law bars */
 (function (global) {
   'use strict';
   const DEQ = (global.DEQ = global.DEQ || {});
   const M = DEQ.Model;
   const DEG = M.DEG, EPS = M.EPS;
   const R = String.raw;
+  const $ = id => document.getElementById(id);
   const n = (x, d) => M.fmt(x, d);          // ASCII, for TeX
   const U = (x, d) => M.ui(x, d);           // unicode minus, for HTML
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-  // " + 1.23" / " - 1.23"
   function sgn(x, d) {
     const s = n(Math.abs(x), d);
     return (x < 0 && Number(s) !== 0 ? ' - ' : ' + ') + s;
   }
-  // sum of [coefficient, factor] terms with correct signs
   function lin(terms, d) {
     let out = '';
     terms.forEach(function (t, i) {
@@ -26,7 +25,7 @@
   }
   const TH = '\\theta', THP = "\\theta'";
 
-  /* ---------- equation rows ---------- */
+  /* ---------- equation rows: mode 1 ---------- */
   function rows1(cfg, an, sol) {
     const p = cfg.p, f = cfg.forced, d = f ? p.d : 0, rows = [];
     const c = p.b * an.k - p.a;
@@ -67,6 +66,7 @@
     return rows;
   }
 
+  /* ---------- equation rows: mode 2 (plain 2nd-order system, hold off) ---------- */
   function rows2(cfg, an, sol) {
     const p = cfg.p, f = cfg.forced, d = f ? p.d : 0, gl = an.gl, rows = [];
     const dT = f ? ' + d' : '', dN = f ? sgn(p.d) : '';
@@ -136,8 +136,50 @@
     return rows;
   }
 
-  /* ---------- KaTeX row rendering ---------- */
-  const cur = { ids: '', els: {}, tex: {} };
+  /* ---------- equation rows: mode 2 with "hold position" (4th order) ---------- */
+  function rowsHold(cfg, an, sol) {
+    const p = cfg.p, f = cfg.forced, d = f ? p.d : 0, gl = an.gl, L = p.L, rows = [];
+    const Kp = an.Kp, Kd = an.Kd, Kx = an.Kx, Kv = an.Kv, a = an.a;
+
+    rows.push({ id: 'model', label: cfg.nonlinear ? 'Physical model: tilt and wheel (simulated)' : 'Physical model: tilt and wheel', tex:
+      R`\begin{aligned} \theta'' &= \frac{g}{L}\sin\theta + u${f ? ' + d' : ''}\\ x'' &= -L\,u${cfg.nonlinear ? R`\,/\cos\theta` : ''}\\ \tfrac{g}{L} &= ${n(gl)},\quad L = ${n(L)}\ \text{m} \end{aligned}` });
+
+    let ctl;
+    if (cfg.saturate) ctl = R`u = \mathrm{sat}_{\pm ${n(p.umax, 1)}}\!\left(-K_p\theta - K_d\theta' - K_x x - K_v x'\right)`;
+    else ctl = R`\begin{aligned} u &= -K_p\theta - K_d\theta' - K_x x - K_v x'\\ &= ${lin([[-Kp, TH], [-Kd, THP], [-Kx, 'x'], [-Kv, "x'"]], 2)} \end{aligned}`;
+    rows.push({ id: 'ctl', label: 'Control law (angle and wheel feedback)', tex: ctl });
+
+    rows.push({ id: 'cl', label: 'Closed-loop ODEs: the θ-equation is still 2nd order', tex:
+      R`\begin{aligned} \theta'' + K_d\theta' + \left(K_p - \tfrac{g}{L}\right)\theta &= -K_x x - K_v x'${f ? ' + d' : ''}\\ \theta''${sgn(Kd)}\,\theta'${sgn(Kp - gl)}\,\theta &= ${lin([[-Kx, 'x'], [-Kv, "x'"]], 2)}${f ? sgn(d) : ''}\\ x'' &= ${n(L)}\left(${lin([[Kp, TH], [Kd, THP], [Kx, 'x'], [Kv, "x'"]], 2)}\right) \end{aligned}` });
+
+    const m = x => n(x);
+    rows.push({ id: 'ss', label: 'State-space form, x = (θ, θ′, x, x′)', tex:
+      R`\begin{aligned} \mathbf{x}' &= (A - BK)\,\mathbf{x}${f ? R` + \begin{bmatrix}0\\ 1\\ 0\\ 0\end{bmatrix} d` : ''}\\ A - BK &= \begin{bmatrix}0 & 1 & 0 & 0\\ ${m(gl - Kp)} & ${m(-Kd)} & ${m(-Kx)} & ${m(-Kv)}\\ 0 & 0 & 0 & 1\\ ${m(L * Kp)} & ${m(L * Kd)} & ${m(L * Kx)} & ${m(L * Kv)}\end{bmatrix} \end{aligned}` });
+
+    rows.push({ id: 'char', label: 'Characteristic equation (4th order)', tex:
+      R`\begin{aligned} \lambda^4 + (K_d - LK_v)\lambda^3 + \left(K_p - \tfrac{g}{L} - LK_x\right)\lambda^2 + gK_v\lambda + gK_x &= 0\\ \lambda^4${sgn(a[0])}\,\lambda^3${sgn(a[1])}\,\lambda^2${sgn(a[2])}\,\lambda${sgn(a[3])} &= 0 \end{aligned}` });
+
+    const ev = an.eig.map((e, i) => R`\lambda_{${i + 1}} &= ${n(e.re)}${Math.abs(e.im) > 1e-9 ? (e.im < 0 ? ' - ' : ' + ') + n(Math.abs(e.im)) + '\\,i' : ''}`);
+    rows.push({ id: 'eig', label: 'Eigenvalues (computed numerically)', tex:
+      R`\begin{aligned} ${ev[0]} \quad & ${ev[1]}\\ ${ev[2]} \quad & ${ev[3]}\\ \max\mathrm{Re}\,\lambda &= ${n(an.maxRe)} \end{aligned}` });
+
+    if (f) {
+      rows.push({ id: 'part', label: 'Particular solution (where it parks)', tex: an.hasEq
+        ? R`\begin{aligned} \theta_p &= -\frac{dL}{g} = ${n(an.thetaP, 3)}\ \text{rad} = ${n(an.thetaP / DEG, 1)}^\circ\\ x_p &= -\frac{K_p\,\theta_p}{K_x} = ${n(an.xP)}\ \text{m} \end{aligned}`
+        : R`K_x = 0:\ \text{no isolated equilibrium (the wheel is free to drift)}` });
+    }
+
+    let g;
+    if (!sol) {
+      g = R`K_x = 0 \;\Rightarrow\; \lambda = 0\ \text{is an eigenvalue: wheel position is not held, so there is no single equilibrium}`;
+    } else {
+      g = R`\begin{aligned} \theta(0) &= ${n(sol.th0, 3)},\ \theta'(0) = ${n(sol.w0, 3)},\ x(0) = ${n(sol.x0, 2)},\ x'(0) = ${n(sol.v0, 2)}\\ \theta(t) &= ${f ? R`\theta_p + ` : ''}\sum_{i=1}^{4} c_i\,e^{\lambda_i t}\quad (c_i\text{ fixed by the 4 initial conditions}) \end{aligned}`;
+    }
+    rows.push({ id: 'sol', label: 'General solution (t measured from your last push)', tex: g });
+    return rows;
+  }
+
+  /* ---------- KaTeX rendering ---------- */
   function renderTeX(el, tex) {
     if (global.katex) {
       try {
@@ -148,28 +190,74 @@
     el.textContent = tex; el.classList.add('raw');
   }
   function flash(el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
-  function updateEq(rows) {
-    const box = document.getElementById('eq-list');
-    const ids = rows.map(r => r.id).join('|'), rebuilt = ids !== cur.ids;
-    if (rebuilt) {
-      box.innerHTML = ''; cur.els = {}; cur.tex = {}; cur.ids = ids;
-      rows.forEach(r => {
-        const row = document.createElement('div'); row.className = 'eq-row';
-        const lab = document.createElement('div'); lab.className = 'eq-label';
-        const body = document.createElement('div'); body.className = 'eq-body';
-        row.appendChild(lab); row.appendChild(body); box.appendChild(row);
-        cur.els[r.id] = { row, lab, body };
-      });
-    }
-    rows.forEach(r => {
-      const e = cur.els[r.id];
-      if (e.lab.textContent !== r.label) e.lab.textContent = r.label;
-      if (cur.tex[r.id] !== r.tex) {
-        renderTeX(e.body, r.tex);
-        if (!rebuilt && cur.tex[r.id] !== undefined) flash(e.row);
-        cur.tex[r.id] = r.tex;
-      }
+
+  /* ---------- equation stepper (one equation at a time) ---------- */
+  const st = { rows: [], id: null, sig: '', shownId: null, shownTex: null };
+  function buildDots() {
+    const host = $('eq-dots'); host.innerHTML = '';
+    st.rows.forEach((r, i) => {
+      const b = document.createElement('button'); b.className = 'dot'; b.title = r.label; b.setAttribute('aria-label', r.label);
+      b.addEventListener('click', () => showRow(i));
+      host.appendChild(b);
     });
+  }
+  function showRow(idx) {
+    const r = st.rows[idx]; if (!r) return;
+    st.id = r.id;
+    $('eq-label').textContent = r.label;
+    $('eq-count').textContent = (idx + 1) + ' / ' + st.rows.length;
+    $('eq-prev').disabled = idx === 0; $('eq-next').disabled = idx === st.rows.length - 1;
+    Array.prototype.forEach.call($('eq-dots').children, (b, i) => b.setAttribute('aria-current', i === idx ? 'true' : 'false'));
+    if (st.shownTex !== r.tex || st.shownId !== r.id) {
+      renderTeX($('eq-body'), r.tex);
+      if (st.shownId === r.id && st.shownTex !== null) flash($('eq-stage'));
+      st.shownId = r.id; st.shownTex = r.tex;
+    }
+  }
+  function updateEq(rows) {
+    st.rows = rows;
+    const sig = rows.map(r => r.id).join('|');
+    let idx = rows.findIndex(r => r.id === st.id); if (idx < 0) idx = 0;
+    if (sig !== st.sig) { st.sig = sig; buildDots(); }
+    showRow(idx);
+  }
+  function stepBy(dir) {
+    const idx = st.rows.findIndex(r => r.id === st.id);
+    showRow(clamp(idx + dir, 0, st.rows.length - 1));
+  }
+  $('eq-prev').addEventListener('click', () => stepBy(-1));
+  $('eq-next').addEventListener('click', () => stepBy(1));
+
+  /* ---------- summary strip ---------- */
+  function eigStr(an) {
+    if (an.hold) {
+      const e = an.eig, used = e.map(() => false), out = [];
+      for (let i = 0; i < e.length; i++) {
+        if (used[i]) continue; used[i] = true;
+        if (Math.abs(e[i].im) > 1e-9) {
+          for (let j = i + 1; j < e.length; j++) if (!used[j] && Math.abs(e[j].im + e[i].im) < 1e-6 && Math.abs(e[j].re - e[i].re) < 1e-6) { used[j] = true; break; }
+          out.push(U(e[i].re, 2) + ' ± ' + U(Math.abs(e[i].im), 2) + 'i');
+        } else out.push(U(e[i].re, 2));
+      }
+      return 'λ = ' + out.join(', ');
+    }
+    if (an.mode === 1) return 'λ = ' + U(an.lam, 2);
+    if (an.type === 'complex') return 'λ = ' + U(an.eig[0].re, 2) + ' ± ' + U(Math.abs(an.eig[0].im), 2) + ' i';
+    return 'λ₁ = ' + U(an.eig[0].re, 2) + ', λ₂ = ' + U(an.eig[1].re, 2);
+  }
+  function verdict(cls, text) { return '<div class="verdict ' + cls + '">' + text + '</div>'; }
+
+  const sumCache = { ode: '', v: '' };
+  function updateSummary(cfg, an) {
+    const f = cfg.forced, rhs = f ? n(cfg.p.d) : '0';
+    let tex;
+    if (cfg.mode === 1) tex = R`x'${sgn(cfg.p.b * an.k - cfg.p.a)}\,x = ${rhs}`;
+    else if (an.hold) tex = R`\theta''${sgn(an.Kd)}\,\theta'${sgn(an.Kp - an.gl)}\,\theta = ${lin([[-an.Kx, 'x'], [-an.Kv, "x'"]], 2)}${f ? sgn(cfg.p.d) : ''}`;
+    else tex = R`\theta''${sgn(an.Kd)}\,\theta'${sgn(an.det)}\,\theta = ${rhs}`;
+    if (tex !== sumCache.ode) { renderTeX($('sum-ode'), tex); sumCache.ode = tex; }
+    const cls = an.stability === 'stable' ? 'good' : an.stability === 'unstable' ? 'bad' : 'warn';
+    const html = verdict(cls, an.klass.label.toUpperCase() + ' · ' + eigStr(an));
+    if (html !== sumCache.v) { $('sum-verdict').innerHTML = html; sumCache.v = html; }
   }
 
   /* ---------- parameter tests ---------- */
@@ -179,16 +267,9 @@
   }
   const PASS = '✓ pass', FAIL = '✗ fail', INFO = 'info';
   const signed = (x, d) => (x >= 0 ? '+' : '') + U(x, d);
-  function eigStr(an) {
-    if (an.mode === 1) return 'λ = ' + U(an.lam, 2);
-    if (an.type === 'complex') return 'λ = ' + U(an.eig[0].re, 2) + ' ± ' + U(Math.abs(an.eig[0].im), 2) + ' i';
-    return 'λ₁ = ' + U(an.eig[0].re, 2) + ', λ₂ = ' + U(an.eig[1].re, 2);
-  }
-  function verdict(cls, text) { return '<div class="verdict ' + cls + '">' + text + '</div>'; }
 
   function tests1(cfg, an) {
-    const p = cfg.p, items = [];
-    const margin = an.margin;
+    const p = cfg.p, items = [], margin = an.margin;
     items.push(test(an.lam < -EPS ? 'pass' : 'fail', an.lam < -EPS ? PASS : FAIL,
       'λ = a − b·k = ' + U(p.a) + ' − (' + U(p.b) + ')(' + U(an.k) + ') = ' + U(an.lam), 'need λ &lt; 0',
       Math.abs(an.lam) <= EPS ? 'λ ≈ 0: marginal' : ''));
@@ -207,7 +288,7 @@
   }
 
   function tests2(cfg, an) {
-    const p = cfg.p, items = [];
+    const items = [];
     items.push(test(an.tr < -EPS ? 'pass' : 'fail', an.tr < -EPS ? PASS : FAIL,
       'tr(A−BK) = −Kd = ' + U(an.tr), 'need tr &lt; 0 ⇔ Kd &gt; 0', Math.abs(an.tr) <= EPS ? 'tr = 0: no damping' : ''));
     items.push(test(an.det > EPS ? 'pass' : 'fail', an.det > EPS ? PASS : FAIL,
@@ -220,6 +301,24 @@
     const cls = an.stability === 'stable' ? 'good' : an.stability === 'unstable' ? 'bad' : 'warn';
     const tail = an.stability === 'stable' ? ': tr &lt; 0 and det &gt; 0 ⇒ every Re λ &lt; 0' : an.stability === 'unstable' ? ': at least one Re λ &gt; 0' : ': Re λ = 0 (no decay)';
     return note + '<ul class="tests">' + items.join('') + '</ul>' + verdict(cls, an.klass.label.toUpperCase() + tail + '<br><span style="font-weight:400">' + eigStr(an) + '</span>');
+  }
+
+  function testsHold(cfg, an) {
+    const a3 = an.a[0], a2 = an.a[1], a1 = an.a[2], a0 = an.a[3];
+    const D2 = a3 * a2 - a1, D3 = a1 * D2 - a3 * a3 * a0;
+    const c = (v, txt) => (v > EPS ? txt : '<b style="color:#b91c1c">' + txt + '</b>');
+    const items = [];
+    const allPos = a3 > EPS && a2 > EPS && a1 > EPS && a0 > EPS;
+    items.push(test(allPos ? 'pass' : 'fail', allPos ? PASS : FAIL,
+      'λ⁴ + a₃λ³ + a₂λ² + a₁λ + a₀:  ' +
+      c(a3, 'a₃ = Kd − L·Kv = ' + U(a3)) + ' · ' + c(a2, 'a₂ = Kp − g/L − L·Kx = ' + U(a2)) + ' · ' +
+      c(a1, 'a₁ = g·Kv = ' + U(a1)) + ' · ' + c(a0, 'a₀ = g·Kx = ' + U(a0)), 'need all four &gt; 0', ''));
+    items.push(test(D2 > EPS ? 'pass' : 'fail', D2 > EPS ? PASS : FAIL, 'Δ₂ = a₃·a₂ − a₁ = ' + U(D2), 'need Δ₂ &gt; 0', ''));
+    items.push(test(D3 > EPS ? 'pass' : 'fail', D3 > EPS ? PASS : FAIL, 'Δ₃ = a₁·Δ₂ − a₃²·a₀ = ' + U(D3), 'need Δ₃ &gt; 0', 'Routh–Hurwitz for a quartic'));
+    items.push(test('info', INFO, 'max Re λ = ' + U(an.maxRe) + ' (numerical roots)', '', 'the slowest pole sets how long the wheel takes to settle'));
+    if (cfg.forced) items.push(test('info', INFO, an.hasEq ? 'parks at x_p = ' + U(an.xP) + ' m with lean θp = ' + U(an.thetaP / DEG, 1) + '°' : 'Kx = 0: no isolated equilibrium', '', 'the lean is −d·L/g: it does not shrink with Kp'));
+    const cls = an.stability === 'stable' ? 'good' : an.stability === 'unstable' ? 'bad' : 'warn';
+    return '<ul class="tests">' + items.join('') + '</ul>' + verdict(cls, an.klass.label.toUpperCase() + '<br><span style="font-weight:400">' + eigStr(an) + '</span>');
   }
 
   /* ---------- "what to notice" ---------- */
@@ -238,22 +337,29 @@
 
   function notice2(cfg, an) {
     const out = [], gl = an.gl, p = cfg.p;
-    if (!an.fb) {
-      out.push('With no feedback, λ = ±√(g/L) = ±' + U(Math.sqrt(gl)) + ' s⁻¹: a saddle. The positive eigenvalue makes any tilt grow. A longer pendulum (smaller g/L) falls more slowly.');
+    if (an.hold) {
+      if (an.stability === 'stable') out.push('Hold position is on: the wheel position x and speed x′ are fed back too, so after the catch the robot rolls back toward its start and stops. The θ-equation is still 2nd order, but it is now driven by −Kx·x − Kv·x′, so stability is decided by four eigenvalues.');
+      else out.push('Hold position is on but the 4-pole loop is not stable. Needed: Kd &gt; L·Kv = ' + U(p.L * p.Kv) + ' and Kp − g/L &gt; L·Kx = ' + U(p.L * p.Kx) + ', plus Δ₂, Δ₃ &gt; 0 (see the tests above). Try the “Self-stabilizing (hold)” preset.');
+      if (cfg.forced) out.push('With d ≠ 0 the robot parks at x_p = ' + U(an.xP) + ' m, leaning θp = −dL/g = ' + U(an.thetaP / DEG, 1) + '°. At rest u = 0, so gravity alone must balance d, and raising Kp does not remove the lean.');
     } else {
-      switch (an.klass.key) {
-        case 'saddle': out.push('det = Kp − g/L &lt; 0: gravity beats the restoring term. One eigenvalue is positive real (a saddle), and no Kd can fix that. Raise Kp above g/L = ' + U(gl) + '.'); break;
-        case 'zero': out.push('Kp ≈ g/L gives a zero eigenvalue: no net restoring force.'); break;
-        case 'center': out.push('Kd ≈ 0: λ = ±i√(Kp − g/L) is purely imaginary, so the robot oscillates forever at ω = ' + U(Math.sqrt(Math.max(an.det, 0))) + ' rad/s. Proportional control alone cannot stabilize it; add Kd.'); break;
-        case 'stable-spiral': out.push('Complex λ = α ± iβ with α = −Kd/2 = ' + U(an.eig[0].re) + ': the oscillation shrinks like e<sup>αt</sup>. Raising Kd moves the poles left until Δ = 0 (critical damping), where they meet on the real axis.'); break;
-        case 'stable-node': case 'stable-degenerate': out.push('Δ ≥ 0: real negative eigenvalues, no oscillation. The slower one (' + U(Math.max(an.eig[0].re, an.eig[1].re)) + ') dominates. Raising Kd further makes it slower, not faster, so compare with the critically damped case.'); break;
-        case 'unstable-spiral': out.push('Kd &lt; 0 is negative damping: it pumps energy in, so the oscillation grows like e<sup>αt</sup> with α = ' + U(an.eig[0].re) + '.'); break;
-        default: out.push('Kd &lt; 0 gives a positive real eigenvalue: the tilt grows without oscillating.');
+      if (!an.fb) {
+        out.push('With no feedback, λ = ±√(g/L) = ±' + U(Math.sqrt(gl)) + ' s⁻¹: a saddle. The positive eigenvalue makes any tilt grow. A longer pendulum (smaller g/L) falls more slowly.');
+      } else {
+        switch (an.klass.key) {
+          case 'saddle': out.push('det = Kp − g/L &lt; 0: gravity beats the restoring term. One eigenvalue is positive real (a saddle), and no Kd can fix that. Raise Kp above g/L = ' + U(gl) + '.'); break;
+          case 'zero': out.push('Kp ≈ g/L gives a zero eigenvalue: no net restoring force.'); break;
+          case 'center': out.push('Kd ≈ 0: λ = ±i√(Kp − g/L) is purely imaginary, so the robot oscillates forever at ω = ' + U(Math.sqrt(Math.max(an.det, 0))) + ' rad/s. Proportional control alone cannot stabilize it; add Kd.'); break;
+          case 'stable-spiral': out.push('Complex λ = α ± iβ with α = −Kd/2 = ' + U(an.eig[0].re) + ': the oscillation shrinks like e<sup>αt</sup>. Raising Kd moves the poles left until Δ = 0 (critical damping), where they meet on the real axis.'); break;
+          case 'stable-node': case 'stable-degenerate': out.push('Δ ≥ 0: real negative eigenvalues, no oscillation. The slower one (' + U(Math.max(an.eig[0].re, an.eig[1].re)) + ') dominates. Raising Kd further makes it slower, not faster, so compare with the critically damped case.'); break;
+          case 'unstable-spiral': out.push('Kd &lt; 0 is negative damping: it pumps energy in, so the oscillation grows like e<sup>αt</sup> with α = ' + U(an.eig[0].re) + '.'); break;
+          default: out.push('Kd &lt; 0 gives a positive real eigenvalue: the tilt grows without oscillating.');
+        }
       }
+      if (an.fb && an.stability === 'stable' && M.wheelsOn(cfg)) out.push('The wheel keeps rolling at constant speed after the recovery, because the controller only measures the angle. Turn on “Hold position” to feed the wheel back too.');
+      if (cfg.forced) out.push(an.stability === 'stable'
+        ? 'd ≠ 0: the eigenvalues have not changed, and only the equilibrium moved, to θp = ' + U(an.thetaP / DEG, 1) + '°. Raise Kp to shrink the lean; with proportional action it never reaches 0.'
+        : 'd ≠ 0 shifts the equilibrium, but it is still unstable, because stability depends only on the eigenvalues.');
     }
-    if (cfg.forced) out.push(an.stability === 'stable'
-      ? 'd ≠ 0: the eigenvalues have not changed, and only the equilibrium moved, to θp = ' + U(an.thetaP / DEG, 1) + '°. Raise Kp to shrink the lean; with proportional action it never reaches 0.'
-      : 'd ≠ 0 shifts the equilibrium, but it is still unstable, because stability depends only on the eigenvalues.');
     if (cfg.nonlinear) out.push('sin θ is on: the dashed prediction assumes sin θ ≈ θ, so it drifts away from the simulation at large angles.');
     if (cfg.saturate) out.push('Saturation is on: a stable linear design can still fall if a big push demands more than u_max = ' + U(p.umax, 0) + '.');
     return out.map(s => '<p>' + s + '</p>').join('');
@@ -262,23 +368,26 @@
   /* ---------- main update (called when parameters or the anchor change) ---------- */
   const cache = { tests: '', notice: '' };
   function update(cfg, an, sol) {
-    updateEq(cfg.mode === 1 ? rows1(cfg, an, sol) : rows2(cfg, an, sol));
-    const t = cfg.mode === 1 ? tests1(cfg, an) : tests2(cfg, an);
-    if (t !== cache.tests) { document.getElementById('tests').innerHTML = t; cache.tests = t; }
+    const rows = cfg.mode === 1 ? rows1(cfg, an, sol) : (an.hold ? rowsHold(cfg, an, sol) : rows2(cfg, an, sol));
+    updateEq(rows);
+    updateSummary(cfg, an);
+    const t = cfg.mode === 1 ? tests1(cfg, an) : (an.hold ? testsHold(cfg, an) : tests2(cfg, an));
+    if (t !== cache.tests) { $('tests').innerHTML = t; cache.tests = t; }
     const nt = cfg.mode === 1 ? notice1(cfg, an) : notice2(cfg, an);
-    if (nt !== cache.notice) { document.getElementById('notice').innerHTML = nt; cache.notice = nt; }
-    const b = document.getElementById('approx-badge');
-    const parts = [];
+    if (nt !== cache.notice) { $('notice').innerHTML = nt; cache.notice = nt; }
+    const b = $('approx-badge'), parts = [];
     if (cfg.saturate) parts.push('saturation');
     if (cfg.mode === 2 && cfg.nonlinear) parts.push('sin θ');
     if (parts.length) { b.hidden = false; b.textContent = 'Linear analysis is approximate (' + parts.join(' + ') + ')'; } else b.hidden = true;
   }
 
-  /* ---------- live control-law bars + readout (called every frame, DOM-cheap) ---------- */
-  const live = { mode: 0, rows: [], scale: 1, html: '' };
-  function buildBars(cfg) {
-    const host = document.getElementById('bars'); host.innerHTML = ''; live.rows = []; live.mode = cfg.mode; live.scale = 1;
-    const names = cfg.mode === 1 ? ['−k·x', 'u (total)'] : ['−Kp·θ', '−Kd·θ′', 'u (total)'];
+  /* ---------- live control-law bars + readout (every frame, DOM-cheap) ---------- */
+  const live = { key: '', rows: [], scale: 1, html: '' };
+  function buildBars(cfg, key) {
+    const host = $('bars'); host.innerHTML = ''; live.rows = []; live.key = key; live.scale = 1;
+    let names;
+    if (cfg.mode === 1) names = ['−k·x', 'u (total)'];
+    else names = (cfg.hold ? ['−Kp·θ', '−Kd·θ′', '−Kx·x', '−Kv·x′'] : ['−Kp·θ', '−Kd·θ′']).concat(['u (total)']);
     names.forEach((nm, i) => {
       const row = document.createElement('div'); row.className = 'bar-row' + (i === names.length - 1 ? ' total' : '');
       row.innerHTML = '<span class="bar-label">' + nm + '</span><span class="bar-track"><span class="bar-fill pos"></span></span><span class="bar-val"></span>';
@@ -286,8 +395,9 @@
       live.rows.push({ fill: row.querySelector('.bar-fill'), val: row.querySelector('.bar-val') });
     });
   }
-  function updateLive(cfg, sim, an) {
-    if (live.mode !== cfg.mode) buildBars(cfg);
+  function updateLive(cfg, sim) {
+    const key = cfg.mode + (cfg.mode === 2 && cfg.hold ? 'h' : '');
+    if (live.key !== key) buildBars(cfg, key);
     const c = sim.ctrl || M.control(cfg, sim.z);
     const vals = c.terms.concat([c.u]);
     let mx = 0; vals.forEach(v => { mx = Math.max(mx, Math.abs(v)); }); mx = Math.max(mx, Math.abs(c.uRaw));
@@ -306,10 +416,11 @@
     if (cfg.mode === 1) {
       html += '<span>x = ' + U(sim.z[0], 3) + ' m</span><span>x′ = ' + U(M.deriv(cfg, sim.z)[0], 3) + ' m/s</span>';
     } else {
-      html += '<span>θ = ' + U(sim.z[0] / DEG, 1) + '° (' + U(sim.z[0], 3) + ' rad)</span><span>θ′ = ' + U(sim.z[1] / DEG, 1) + '°/s (' + U(sim.z[1], 3) + ' rad/s)</span>';
+      html += '<span>θ = ' + U(sim.z[0] / DEG, 1) + '°</span><span>θ′ = ' + U(sim.z[1] / DEG, 1) + '°/s</span>';
+      if (M.wheelsOn(cfg)) html += '<span>wheel x = ' + U(sim.z[2], 2) + ' m</span><span>x′ = ' + U(sim.z[3], 2) + ' m/s</span>';
     }
     if (clipped) html += '<span style="color:#b91c1c">u would be ' + U(c.uRaw, 1) + ' → clipped to ' + U(c.u, 1) + '</span>';
-    if (html !== live.html) { document.getElementById('readout').innerHTML = html; live.html = html; }
+    if (html !== live.html) { $('readout').innerHTML = html; live.html = html; }
   }
 
   DEQ.MathPanel = { update, updateLive };
